@@ -16,10 +16,3 @@ def generate_quadratic(kappa: float, n: int = 2, seed: int | None = None) -> np.
     # эта операция заменяет каждый элемент на среднее арифметическое между ним и его зеркалом
     return 0.5 * (A + A.T)
 
-def quadratic_value(X: np.ndarray, Y: np.ndarray, A: np.ndarray) -> np.ndarray:
-    """
-    Вычисляет значения функции f(x1, x2) = 0.5 * x^T A x
-    для 2D-матрицы A.
-    """
-    # Для 2D случая расписываем явно для скорости
-    return 0.5 * (A[0, 0] * X**2 + 2 * A[0, 1] * X * Y + A[1, 1] * Y**2)
