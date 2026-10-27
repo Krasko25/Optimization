@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-
 def plot_surface(ax, X, Y, Z,
                  title: str, Length: float = 3.0):
     """Рисует одну 3D-функцию на переданной оси"""
@@ -28,3 +27,4 @@ def plot_surface(ax, X, Y, Z,
     # elem - угол подъёма камеры над плоскостью
     # azim - угол поворота камеры вокруг вертикальной оси
     ax.view_init(elev=28, azim=-50)
+
