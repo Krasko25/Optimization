@@ -1,37 +1,27 @@
-import numpy as np
+from src.optimization.generators import create_and_save_problem
 from pathlib import Path
-from src.optimization.generators import generate_quadratic
-
-
-def create_and_save_problem(n: int, kappa: float, seed: int):
-    """Генерирует матрицу, начальную точку и сохраняет в .npz"""
-    # Генерируем матрицу
-    A = generate_quadratic(kappa=kappa, n=n, seed=seed)
-    # Генерируем начальную точку
-    # Используем тот же seed, чтобы точка была воспроизводимой
-    rng = np.random.default_rng(seed)
-    x0 = rng.standard_normal(n) * 2.0  # умножаем на 2, чтобы отойти от нуля
-
-    # Вектор b для f(x) = 0.5*x^T A x - b^T x
-    b = rng.standard_normal(n)
-
-    # Формируем путь и сохраняем
-    save_dir = Path("data/quadratics")
-    save_dir.mkdir(parents=True, exist_ok=True)
-
-    filename = save_dir / f"n{n}_k{kappa}.npz"
-
-    # np.savez сохраняет словарь массивов
-    np.savez(filename, A=A, b=b, x0=x0)
-    print(f"Сохранено: {filename}")
-
 
 if __name__ == "__main__":
-    # Генерируем сетку задач
-    dims = [2, 10, 100]
-    kappas = [1, 10, 100, 1000]
+    # 2-10 с шагом 1, 20-100 с шагом 10, 150-1000 с шагом 50
+    dims = list(range(2, 10)) + list(range(20, 101, 20))
+    kappas = range(1, 20)
+    R = 5.0
+    NUM_REPEATS = 2  # Сколько случайных задач генерировать для каждого kappa
+
+    # Находим корень проекта.
+    # __file__ это путь к текущему скрипту.
+    # .resolve().parent - поднимаемся на 2 уровня вверх
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+    # Формируем полный путь до нужной папки
+    SAVE_PATH = PROJECT_ROOT / "data" / "quadratics1"
 
     for n in dims:
         for kappa in kappas:
-            # В качестве seed можно использовать комбинацию n и kappa
-            create_and_save_problem(n=n, kappa=kappa, seed=n + int(kappa))
+            for i in range(NUM_REPEATS):
+                create_and_save_problem(
+                    n=n,
+                    kappa=kappa,
+                    R=R,
+                    save_dir=SAVE_PATH  # Передаем абсолютный путь
+                )

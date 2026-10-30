@@ -21,7 +21,7 @@ def plot_surface(ax, X, Y, Z,
                cmap='viridis', linewidths=0.9)
     # 4. заголовки осей
     ax.set_title(title, fontsize=11)
-    ax.set(xlabel='x₁', ylabel='x₂', zlabel='f(x)',
+    ax.set(xlabel='u₁', ylabel='u₂', zlabel='f(u)',
            xlim=(-Length, Length), ylim=(-Length, Length), zlim=(z_off, Z.max()))
     # 5. положение камеры
     # elem - угол подъёма камеры над плоскостью
