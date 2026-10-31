@@ -1,9 +1,9 @@
-from src.optimization.generators import create_and_save_problem
+from src.optimization.fileManager import create_and_save_problem
 from pathlib import Path
 
 if __name__ == "__main__":
     # 2-10 с шагом 1, 20-100 с шагом 10, 150-1000 с шагом 50
-    dims = [2, 3, 5, 10, 20, 30, 40, 50, 75, 100, 150, 200, 300, 400, 500, 1000, 2000, 5000, 10000]
+    dims = [2, 3, 5, 10, 20, 30, 40, 50, 75, 100, 150, 200, 300, 400, 500, 1000]
     kappas = range(1, 21)
     R = 5.0
     NUM_REPEATS = 1  # Сколько случайных задач генерировать для каждого kappa

@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 from glob import glob
+from optimization.fileManager import load_problem_file
 import time
 import re
 
@@ -11,9 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data" / "quadratics1"
 
 
-def load_problem_file(filepath: str):
-    data = np.load(filepath)
-    return data['A'], data['b'], data['u0'], data['u_star']
+data = load_problem_file("path/to/file.npz")
 
 
 # создание задачи
@@ -119,57 +118,42 @@ for n, kappa in sorted(pairs):
 
     print(f"{n:<5} {kappa:<8} {iter_nest:<12} {iter_adam:<12} {time_nest:<12.4f} {time_adam:<12.4f}")
 
-# 4. Графики
-import numpy as np
-import matplotlib.pyplot as plt
-
+# 4. графики
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
-# --- График 1: Среднее время от размерности n ---
+# График 1: Среднее время от размерности n
 ns = sorted(list(set(r['n'] for r in results)))
-mean_t_nest_n, std_t_nest_n = [], []
-mean_t_adam_n, std_t_adam_n = [], []
+mean_t_nest_n = []
+mean_t_adam_n = []
 
 for n in ns:
-    # Собираем все результаты для конкретного n
     subset = [r for r in results if r['n'] == n]
-    t_nest = [r['time_nest'] for r in subset]
-    t_adam = [r['time_adam'] for r in subset]
+    mean_t_nest_n.append(np.mean([r['time_nest'] for r in subset]))
+    mean_t_adam_n.append(np.mean([r['time_adam'] for r in subset]))
 
-    mean_t_nest_n.append(np.mean(t_nest))
-    std_t_nest_n.append(np.std(t_nest))
-    mean_t_adam_n.append(np.mean(t_adam))
-    std_t_adam_n.append(np.std(t_adam))
+ax1.plot(ns, mean_t_nest_n, 'o-', label='Nesterov', color='C0')
+ax1.plot(ns, mean_t_adam_n, 's--', label='Adam', color='C1')
 
-# Строим график со свечами
-ax1.errorbar(ns, mean_t_nest_n, yerr=std_t_nest_n, fmt='o-', label='Nesterov', color='C0', capsize=3)
-ax1.errorbar(ns, mean_t_adam_n, yerr=std_t_adam_n, fmt='s--', label='Adam', color='C1', capsize=3)
-
-ax1.set_xlabel("Размерность n")
+ax1.set_xlabel("Размерность")
 ax1.set_ylabel("Среднее время (секунды)")
-ax1.set_title("Среднее время от размерности\n(усреднено для всех обусловленностей")
+ax1.set_title("Среднее время от размерности\n(усреднено по всем обусловленностям)")
 ax1.legend()
 ax1.grid(True, alpha=0.3)
 
 
 # Среднее время от обусловленности
 kappas = sorted(list(set(r['kappa'] for r in results)))
-mean_t_nest_k, std_t_nest_k = [], []
-mean_t_adam_k, std_t_adam_k = [], []
+mean_t_nest_k = []
+mean_t_adam_k = []
 
 for k in kappas:
-    # Собираем все результаты для конкретного k
     subset = [r for r in results if r['kappa'] == k]
-    t_nest = [r['time_nest'] for r in subset]
-    t_adam = [r['time_adam'] for r in subset]
+    mean_t_nest_k.append(np.mean([r['time_nest'] for r in subset]))
+    mean_t_adam_k.append(np.mean([r['time_adam'] for r in subset]))
 
-    mean_t_nest_k.append(np.mean(t_nest))
-    std_t_nest_k.append(np.std(t_nest))
-    mean_t_adam_k.append(np.mean(t_adam))
-    std_t_adam_k.append(np.std(t_adam))
-
-ax2.errorbar(kappas, mean_t_nest_k, yerr=std_t_nest_k, fmt='o-', label='Nesterov', color='C0', capsize=3)
-ax2.errorbar(kappas, mean_t_adam_k, yerr=std_t_adam_k, fmt='s--', label='Adam', color='C1', capsize=3)
+# Используем обычный plot вместо errorbar
+ax2.plot(kappas, mean_t_nest_k, 'o-', label='Nesterov', color='C0')
+ax2.plot(kappas, mean_t_adam_k, 's--', label='Adam', color='C1')
 
 ax2.set_xlabel("Число обусловленности")
 ax2.set_ylabel("Среднее время (секунды)")
