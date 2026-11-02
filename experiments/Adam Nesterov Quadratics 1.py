@@ -2,17 +2,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 from glob import glob
-from optimization.fileManager import load_problem_file
 import time
 import re
 
 
 # загрузка файлов тестов
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+def get_project_root() -> Path:
+    current = Path.cwd()
+    for parent in [current] + list(current.parents):
+        if (parent / "pyproject.toml").exists():
+            return parent
+    raise FileNotFoundError("Не удалось найти корень проекта")
+
+PROJECT_ROOT = get_project_root()
 DATA_DIR = PROJECT_ROOT / "data" / "quadratics1"
 
-
-data = load_problem_file("path/to/file.npz")
+def load_problem_file(filepath: str):
+    data = np.load(filepath)
+    return data['A'], data['b'], data['u0'], data['u_star']
 
 
 # создание задачи
