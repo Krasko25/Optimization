@@ -3,46 +3,63 @@ import time
 import numpy as np
 
 
-def run_optimization(optimizer_class, A_np, b_np, u0_np, u_star_np, num_iters=5000, tol=0.05, **opt_kwargs):
+def run_optimization(optimizer_class, u0_np, loss_fn, u_star_np=None,
+                     num_iters=5000, tol_dist=0.05, tol_grad=1e-6, **opt_kwargs):
     """
     Универсальный цикл оптимизации для любых методов в стиле PyTorch
     """
-    # Конвертируем в тензоры PyTorch
-    A = torch.tensor(A_np, dtype=torch.float64)
-    b = torch.tensor(b_np, dtype=torch.float64)
-    u_star = torch.tensor(u_star_np, dtype=torch.float64)
-
-    # 2. Создаем параметр и оптимизатор
     u = torch.tensor(u0_np, dtype=torch.float64, requires_grad=True)
+    #Глобальный минимум, в нём градиент вычислять не нужно будет
+    if u_star_np is not None:
+        u_star = torch.tensor(u_star_np, dtype=torch.float64)
+    else:
+        u_star = None
+
+    #Начальное расстояние до оптимума
+    if u_star_np is not None:
+        dist0 = torch.norm(u - u_star).item()
+    else:
+        dist0 = 1.0
+
+    # счётчики вызовов f и ∇f
+    f_evals = 0
+    grad_evals = 0
+
+    def counted_loss_fn(u_):
+        nonlocal f_evals
+        f_evals += 1
+        return loss_fn(u_)
+
     optimizer = optimizer_class([u], **opt_kwargs)
-
-    dist0 = torch.norm(u - u_star).item()
-    hist = {'f': [], 'dist': [], 'time': 0.0, 'iters': 0}
-
+    hist = {'f': [], 'dist': [], 'grad_norm': [], 'time': 0.0, 'iters': 0,
+            'f_evals': 0, 'grad_evals': 0}
     start_time = time.perf_counter()
 
     for t in range(num_iters):
-        # 3. Стандартный цикл PyTorch
         optimizer.zero_grad()
-
-        # Вычисляем функцию потерь (и градиент автоматически)
-        loss = 0.5 * u @ A @ u - b @ u
+        loss = counted_loss_fn(u)
         loss.backward()
+        grad_evals += 1
 
-        # Шаг метода
+        grad_norm = torch.norm(u.grad).item() if u.grad is not None else 0.0
+
         optimizer.step()
 
-        # 4. Считаем метрики (без градиента)
         with torch.no_grad():
             f_val = loss.item()
-            dist = torch.norm(u - u_star).item()
             hist['f'].append(f_val)
-            hist['dist'].append(dist)
+            hist['grad_norm'].append(grad_norm)
 
-            if dist / dist0 < tol:
+            if u_star is not None:
+                dist = torch.norm(u - u_star).item()
+                hist['dist'].append(dist)
+                if dist / dist0 < tol_dist:
+                    break
+            elif grad_norm < tol_grad:
                 break
 
     hist['time'] = time.perf_counter() - start_time
     hist['iters'] = t + 1
-
+    hist['f_evals'] = f_evals
+    hist['grad_evals'] = grad_evals
     return u.detach().numpy(), hist
