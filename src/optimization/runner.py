@@ -68,8 +68,11 @@ def run_optimization(optimizer_class, u0_np, loss_fn, u_star_np=None,
 
     hist['time'] = time.perf_counter() - start_time
     hist['iters'] = i + 1
-    hist['f_evals'] = f_evals
-    hist['grad_evals'] = grad_evals
+    # Счётчики runner'а + внутренние счётчики оптимизатора
+    # getattr с 0 — чтобы работало и для Adam/Nesterov, у которых нет этих атрибутов
+    hist['f_evals'] = f_evals + getattr(optimizer, 'f_evals', 0)
+    hist['grad_evals'] = grad_evals + getattr(optimizer, 'grad_evals', 0)
+    return u.detach().numpy(), hist
 
     # .detach() отвязывает тензор, .numpy преобразует в numpy формат
     return u.detach().numpy(), hist
