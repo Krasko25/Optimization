@@ -9,7 +9,7 @@ import imageio
 plt.rcParams['mathtext.fontset'] = 'cm'
 plt.rcParams['text.usetex'] = False
 
-output_gif = "optimization_good_conditioning.gif"
+output_gif = "optimization_zigzag.gif"
 fps = 3
 
 n_grid = 100
@@ -19,8 +19,8 @@ A = np.array([[2.5, 0.5],
               [0.5, 2.5]])
 
 # Матрица с сильным оврагом
-#A = np.array([[2.0, 1.5],
- #             [1.5, 2.0]])
+A = np.array([[5.0, 4.5],
+              [4.5, 5.0]])
 b = np.array([0.0, 0.0])
 
 # Начальная точка
@@ -29,7 +29,7 @@ u_opt = np.linalg.solve(A, b)
 
 # Параметры спуска
 lr = 0.18
-n_steps = 4
+n_steps = 8
 
 x = np.linspace(-grid_range, grid_range, n_grid)
 y = np.linspace(-grid_range, grid_range, n_grid)
