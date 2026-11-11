@@ -27,9 +27,15 @@ MAX_ITERS_MAP = {
     "Adam": NUM_ITERS,
     "Метод Нестерова": NUM_ITERS,
     "Метод коллинеарных градиентов": 50,
+    "Градиентный спуск": NUM_ITERS,
 }
 
-OPTIMIZER_NAMES = ["Adam", "Метод Нестерова", "Метод коллинеарных градиентов"]
+OPTIMIZER_NAMES = [
+    "Adam",
+    "Метод Нестерова",
+    "Метод коллинеарных градиентов",
+    "Градиентный спуск",
+]
 
 
 def seeds_for(n: int, kappa: int) -> tuple[int, int, int]:
@@ -44,6 +50,8 @@ def make_optimizers(loss_fn):
         "Метод Нестерова": (torch.optim.SGD, dict(lr=LR,
                                                  momentum=MOMENTUM_NESTEROV,
                                                  nesterov=True)),
+        # Классический градиентный спуск = обычный SGD без momentum
+        "Градиентный спуск": (torch.optim.SGD, dict(lr=LR)),
         "Метод коллинеарных градиентов": (CollinearGradients, dict(
             lr=1.0,
             objective_fn=loss_fn,
@@ -58,7 +66,7 @@ def make_optimizers(loss_fn):
 
 def run_experiment():
     """
-    Перебирает (n, kappa), запускает Adam, Нестерова и CollGM.
+    Перебирает (n, kappa), запускает Adam, Нестерова, CollGM и классический GD.
 
     Возвращает:
         results     — {name: {n: {kappa: {time, iters, dist_final,
@@ -146,6 +154,7 @@ def aggregate_by_kappa(results):
         }
     return out
 
+
 def plot_all(results):
     """
     Композитный рисунок 3x2
@@ -182,20 +191,17 @@ def plot_all(results):
     ax_d.set_xlabel("Число обусловленности $\\kappa$")
     ax_d.set_ylabel("Итерации")
 
-    # (e) количество вычислений (f + ∇f) от n
+    # (e) количество вычислений от n
     for name, d in data_n.items():
         ax_e.plot(d["n"], d["evals_mean"], marker="o", label=name)
     ax_e.set_xlabel("Размерность n")
-    ax_e.set_ylabel("Вычислений $f и \\nabla f$, шт.")
-    # Если разброс большой — раскомментируй строку ниже (и удали plot выше):
-    # ax_e.set_yscale("log")
+    ax_e.set_ylabel(r"Вычислений $f + \nabla f$, шт.")
 
-    # (f) количество вычислений (f + ∇f) от обусловленности
+    # (f) количество вычислений от обусловленности
     for name, d in data_k.items():
         ax_f.plot(d["kappa"], d["evals_mean"], marker="o", label=name)
     ax_f.set_xlabel("Число обусловленности $\\kappa$")
-    ax_f.set_ylabel("Вычислений $f и \\nabla f$, шт.")
-    # ax_f.set_yscale("log")
+    ax_f.set_ylabel(r"Вычислений $f + \nabla f$, шт.")
 
     # Общая легенда снизу
     handles, labels = ax_a.get_legend_handles_labels()
