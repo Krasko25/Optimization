@@ -109,10 +109,6 @@ class CollinearGradients(Optimizer):
         # внутри _set_flat происходит копирование значений
         self._set_flat(u_flat)
 
-        # обнуляем старые градиенты
-        for param in self._params_list():
-            param.grad = None
-
         # получаем список тензоров
         params = self._params_list()
 
@@ -127,15 +123,16 @@ class CollinearGradients(Optimizer):
             else:
                 loss = self.objective_fn(*params)
 
-            loss.backward()
+            # используем torch.autograd.grad, а не loss.backward()
+            # так как история градиента тут не нужна и избавление от записи ускорит метод
+            grads = torch.autograd.grad(loss, params, allow_unused=False)
+
         self.f_evals += 1
         self.grad_evals += 1
 
         # возвращаем градиент в виде плоского вектора
-        # _get_flat_grad() — склеивает все градиенты в один вектор
-        # .detach() — отвязывает тензор от графа autograd
-        # .clone() — создает независимую копию
-        return self._get_flat_grad().detach().clone()
+        flat_parts = [g.reshape(-1) for g in grads]
+        return torch.cat(flat_parts)
 
     # вычисление невязки коллинеарности r(u) (формула 6 из статьи)
     def _residue(self, u_flat, grad_k, grad_k_norm):
@@ -200,14 +197,14 @@ class CollinearGradients(Optimizer):
         1) Поиск точки u_k_star в окрестности u_k, где градиент коллинеарен исходному
         2) Вычисление направления d_k и шага b_k, ведущих к оптимуму, и обновление параметров
         """
-        grad_k = self._get_flat_grad().clone()
+        grad_k = self._get_flat_grad()
         grad_k_norm = grad_k.norm()
 
         if grad_k_norm.item() < 1e-30:
             return
 
         # берем текущую точку u^k в виде плоского вектора
-        u_k = self._get_flat().clone()
+        u_k = self._get_flat()
         n = u_k.numel()
 
         # Первая точка подитераций (формула 10 из статьи)
@@ -225,7 +222,7 @@ class CollinearGradients(Optimizer):
         r_l_norm_sq = (r_l * r_l).sum()
 
         # начальное направление CG — антиградиент невязки
-        p_cg = -r_l.clone()
+        p_cg = -r_l
 
         # Настройка лимитов
 
@@ -243,8 +240,8 @@ class CollinearGradients(Optimizer):
         # если МКГ уйдет от u_k дальше этого радиуса, поиск коллинеарности теряет смысл
         delta_m = self.delta_m_factor * self.delta0
 
-        u_k_star = u_k_l.clone()
-        grad_k_star = grad_k_l.clone()
+        u_k_star = u_k_l
+        grad_k_star = grad_k_l
 
         # поиск коллинеарной точки
 
@@ -288,8 +285,8 @@ class CollinearGradients(Optimizer):
             r_l_new_norm_sq = (r_l_new * r_l_new).sum()
 
             # сохраняем эту точку как "лучшую"
-            u_k_star = u_k_l.clone()
-            grad_k_star = grad_k_l.clone()
+            u_k_star = u_k_l
+            grad_k_star = grad_k_l
 
             # Обновление направления МКГ (формула Флетчера-Ривса)
             # рестарт каждые n итераций (защита от потери сопряженности из-за шума конечных разностей)
