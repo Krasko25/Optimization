@@ -240,7 +240,7 @@ class CollinearGradients(Optimizer):
         # если МКГ уйдет от u_k дальше этого радиуса, поиск коллинеарности теряет смысл
         delta_m = self.delta_m_factor * self.delta0
 
-        # порог остановки по точности коллинеарности константа, не зависит от итерации,
+        # порог остановки по точности коллинеарности — константа, не зависит от итерации,
         # поэтому вычисляем один раз до цикла
         c1_sqrt2 = self.c1 * math.sqrt(2)
 
@@ -262,12 +262,13 @@ class CollinearGradients(Optimizer):
                 break
 
             # УСЛОВИЕ ОСТАНОВКИ 3: направление МКГ выродилось (почти нулевое)
-            p_norm = p_cg.norm()
-            if p_norm.item() < 1e-30:
+            p_norm_val = p_cg.norm().item()
+            if p_norm_val < 1e-30:
                 break
 
             # формула 9
-            h = self.h0 / p_norm.item()
+            h = self.h0 / p_norm_val
+
             u_pert = u_k_l + h * p_cg
             _, r_pert = self._residue(u_pert, grad_k, grad_k_norm)
             Hp = (r_pert - r_l) / h
