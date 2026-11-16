@@ -240,6 +240,10 @@ class CollinearGradients(Optimizer):
         # если МКГ уйдет от u_k дальше этого радиуса, поиск коллинеарности теряет смысл
         delta_m = self.delta_m_factor * self.delta0
 
+        # порог остановки по точности коллинеарности константа, не зависит от итерации,
+        # поэтому вычисляем один раз до цикла
+        c1_sqrt2 = self.c1 * math.sqrt(2)
+
         u_k_star = u_k_l
         grad_k_star = grad_k_l
 
@@ -250,7 +254,7 @@ class CollinearGradients(Optimizer):
 
             # УСЛОВИЕ ОСТАНОВКИ 1: достигли нужной точности коллинеарности
             # ||r|| <= c1 * sqrt(2)
-            if r_l_norm_sq.sqrt().item() <= self.c1 * math.sqrt(2):
+            if r_l_norm_sq.sqrt().item() <= c1_sqrt2:
                 break
 
             # УСЛОВИЕ ОСТАНОВКИ 2: вышли за минимальный радиус окрестности
