@@ -135,14 +135,21 @@ class CollinearGradients(Optimizer):
         return torch.cat(flat_parts)
 
     # вычисление невязки коллинеарности r(u) (формула 6 из статьи)
-    def _residue(self, u_flat, grad_k, grad_k_norm):
-        """Возвращает (∇J(u), r(u)) — градиент и невязку коллинеарности."""
+    def _residue(self, u_flat, grad_k, grad_k_unit):
+        """
+        Возвращает (∇J(u), r(u)) — градиент и невязку коллинеарности.
+
+        grad_k_unit = grad_k / ||grad_k|| передаётся снаружи: это инвариант
+        относительно точки u, поэтому вычисляется один раз в step(),
+        а не на каждом вызове _residue.
+        """
         grad_u = self._eval_grad(u_flat)
 
-        grad_u_norm = grad_u.norm()
+        # .item() здесь всё равно нужен — ниже проверяем на 0 (Python-bool)
+        gn_val = grad_u.norm().item()
 
         # защита от деления на ноль
-        if grad_u_norm.item() < 1e-300:
+        if gn_val < 1e-300:
             # torch.zeros_like создаёт такой же тензор, но заполненный нулями
             return grad_u, torch.zeros_like(grad_u)
 
@@ -150,13 +157,14 @@ class CollinearGradients(Optimizer):
         # s = 1, если градиенты сонаправлены (угол < 90 градусов)
         # s = -1, если градиенты противоположно направлены (угол > 90 градусов)
         # что важно для поиска прямой, проходящей через оптимум
-        s = 1.0 if (grad_u * grad_k).sum().item() >= 0 else -1.0
+        s = 1.0 if torch.dot(grad_u, grad_k).item() >= 0 else -1.0
 
         # формула (6) из статьи:
         # r(u) = s * grad_u / ||grad_u|| - grad_k / ||grad_k||
         # если градиенты коллинеарны (сонаправлены или противоположны), то r = 0
         # если они перпендикулярны, то ||r|| = sqrt(2)
-        r = s * grad_u / grad_u_norm - grad_k / grad_k_norm
+        scalar = s / gn_val
+        r = grad_u.mul(scalar).sub_(grad_k_unit)
 
         return grad_u, r
 
@@ -164,7 +172,7 @@ class CollinearGradients(Optimizer):
     # Внешний шаг
     # ------------------------------------------------------------------
     # отключает построение вычисл графа autograd для операций внутри след. функции
-    @torch.no_grad()    # Публичный метод, который вызывается извне (например, из runner.py).
+    @torch.no_grad()    # Публичный метод, который вызывается извне (например, из runner.py)
     def step(self, closure=None):
         """Это "обертка" над _step_impl, которая решает вопросы совместимости и безопасности"""
         # защита от отсутствия функции
@@ -203,6 +211,11 @@ class CollinearGradients(Optimizer):
         if grad_k_norm.item() < 1e-30:
             return
 
+        # grad_k_unit — инвариант относительно точки u
+        # Вычисляем один раз здесь, чтобы не делать grad_k / grad_k_norm
+        # на каждом вызове _residue
+        grad_k_unit = grad_k / grad_k_norm
+
         # берем текущую точку u^k в виде плоского вектора
         u_k = self._get_flat()
         n = u_k.numel()
@@ -212,14 +225,15 @@ class CollinearGradients(Optimizer):
         # отступаем от u^k на расстояние delta_k в направлении роста функции
         # деление на sqrt(n) нужно, чтобы евклидова длина шага была ровно delta_k
         delta_k = self.delta0
-        u_k_l = u_k + (delta_k / math.sqrt(n)) * torch.sign(grad_k)
+        u_k_l = torch.sign(grad_k).mul_(delta_k / math.sqrt(n)).add_(u_k)
 
         # Начальная невязка
         # _residue возвращает градиент и невязку
-        grad_k_l, r_l = self._residue(u_k_l, grad_k, grad_k_norm)
+        grad_k_l, r_l = self._residue(u_k_l, grad_k, grad_k_unit)
 
         # храним квадрат нормы невязки
-        r_l_norm_sq = (r_l * r_l).sum()
+        # torch.dot быстрее (a * b).sum() — без промежуточного тензора
+        r_l_norm_sq = torch.dot(r_l, r_l)
 
         # начальное направление CG — антиградиент невязки
         p_cg = -r_l
@@ -270,11 +284,11 @@ class CollinearGradients(Optimizer):
             h = self.h0 / p_norm_val
 
             u_pert = u_k_l + h * p_cg
-            _, r_pert = self._residue(u_pert, grad_k, grad_k_norm)
+            _, r_pert = self._residue(u_pert, grad_k, grad_k_unit)
             Hp = (r_pert - r_l) / h
 
             # скалярное произведение <p, Hp>
-            pHp = (p_cg * Hp).sum()
+            pHp = torch.dot(p_cg, Hp)
 
             # защита от деления на ноль
             if pHp.abs().item() < 1e-300:
@@ -283,11 +297,11 @@ class CollinearGradients(Optimizer):
             # шаг МКШ (формула 8)
             # τ - длина шага
             tau = r_l_norm_sq / pHp  # оптимальный шаг МКГ
-            u_k_l = u_k_l + tau * p_cg  # обновляем точку
+            u_k_l = torch.addcmul(u_k_l, p_cg, tau)
 
             # новая невязка
-            grad_k_l, r_l_new = self._residue(u_k_l, grad_k, grad_k_norm)
-            r_l_new_norm_sq = (r_l_new * r_l_new).sum()
+            grad_k_l, r_l_new = self._residue(u_k_l, grad_k, grad_k_unit)
+            r_l_new_norm_sq = torch.dot(r_l_new, r_l_new)
 
             # сохраняем эту точку как "лучшую"
             u_k_star = u_k_l
@@ -296,11 +310,11 @@ class CollinearGradients(Optimizer):
             # Обновление направления МКГ (формула Флетчера-Ривса)
             # рестарт каждые n итераций (защита от потери сопряженности из-за шума конечных разностей)
             if l % n == 0:
-                beta = 0.0  # сброс на обычный градиентный спуск
+                p_cg = -r_l_new  # сброс на обычный градиентный спуск
             else:
-                beta = (r_l_new_norm_sq / max(r_l_norm_sq, 1e-300)).item()
+                beta_tensor = r_l_new_norm_sq / r_l_norm_sq.clamp_min(1e-300)
+                p_cg.mul_(beta_tensor).sub_(r_l_new)
 
-            p_cg = -r_l_new + beta * p_cg  # новое направление
             r_l = r_l_new  # обновляем невязку
             r_l_norm_sq = r_l_new_norm_sq
 
@@ -316,8 +330,8 @@ class CollinearGradients(Optimizer):
         # Вычисление оптимального шага b_k (формула 5)
         # b_k = 1 / (1 - <∇J(u^k), d^k> / <∇J(u^k_star), d^k>)
         # это минимум параболы f(u^k + b*d^k) вдоль направления d_k
-        num = (grad_k * d_k).sum().item()
-        den = (grad_k_star * d_k).sum().item()
+        num = torch.dot(grad_k, d_k).item()
+        den = torch.dot(grad_k_star, d_k).item()
 
         # защита от деления на ноль
         if abs(den) < 1e-300:
@@ -335,11 +349,11 @@ class CollinearGradients(Optimizer):
         # ПРОЦЕДУРА GETSTEP (принудительный спуск)
         # проверяем, что мы движемся в сторону УБЫВАНИЯ функции
         # скалярное произведение <-grad_k, step_vec> должно быть положительным (угол < 90 градусов)
-        if (-grad_k * step_vec).sum().item() <= 0:
+        if torch.dot(grad_k, step_vec).item() >= 0:
             # если мы движемся в гору — переворачиваем направление
             d_k = -d_k
-            num = (grad_k * d_k).sum().item()
-            den = (grad_k_star * d_k).sum().item()
+            num = torch.dot(grad_k, d_k).item()
+            den = torch.dot(grad_k_star, d_k).item()
             if abs(den) < 1e-300:
                 return
             one_minus = 1.0 - num / den
