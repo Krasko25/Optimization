@@ -17,8 +17,6 @@ class CollinearGradients(Optimizer):
         Параметр ограничения числа подитераций (по умолчанию 4.0)
     delta0 : float
         Начальный радиус окрестности (по умолчанию 1e-5)
-    delta_m_factor : float
-        Минимальный радиус = delta_m_factor * delta0 (по умолчанию 1e-15)
     h0 : float
         Шаг конечных разностей (по умолчанию 1e-8)
     l_max_cap : int
@@ -26,7 +24,7 @@ class CollinearGradients(Optimizer):
     """
 
     def __init__(self, params, lr=1.0, objective_fn=None,
-                 c1=1e-8, c2=4.0, delta0=1e-5, delta_m_factor=1e-15,
+                 c1=1e-8, c2=4.0, delta0=1e-5,
                  h0=1e-8, l_max_cap=1000):
         if lr < 0.0:
             raise ValueError(f"Шаговый множитель не может быть отрицательным {lr}")
@@ -38,7 +36,6 @@ class CollinearGradients(Optimizer):
         self.c1 = c1
         self.c2 = c2
         self.delta0 = delta0
-        self.delta_m_factor = delta_m_factor
         self.h0 = h0
         self.l_max_cap = l_max_cap
 
@@ -250,9 +247,9 @@ class CollinearGradients(Optimizer):
                          * abs(math.log(max(self.c1, 1e-15))))),
         )
 
-        # минимальный радиус окрестности: delta_m = delta_m_factor * delta_0
         # если МКГ уйдет от u_k дальше этого радиуса, поиск коллинеарности теряет смысл
-        delta_m = self.delta_m_factor * self.delta0
+        eps = torch.finfo(u_k.dtype).eps
+        delta_m = 1e5 * eps * self.delta0
 
         # порог остановки по точности коллинеарности — константа, не зависит от итерации,
         # поэтому вычисляем один раз до цикла
