@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "imageio>=2.38.1",
     "ipykernel>=7.4.0",
+    "lion-pytorch>=0.2.5",
     "matplotlib>=3.11.2",
     "numpy>=2.5.4",
     "torch>=2.14.1",
