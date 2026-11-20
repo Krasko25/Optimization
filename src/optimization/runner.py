@@ -1,14 +1,17 @@
+
 import torch
 import time
 import numpy as np
 
 
 def run_optimization(optimizer_class, u0_np, loss_fn, u_star_np=None,
-                     num_iters=5000, tol_dist=0.05, tol_grad=1e-6, **opt_kwargs):
+                     num_iters=5000, tol_dist=0.05, tol_grad=1e-6,
+                     max_time=None, **opt_kwargs):
     """
     Универсальный цикл оптимизации для любых методов в стиле PyTorch
     """
     u = torch.tensor(u0_np, dtype=torch.float64, requires_grad=True)
+
     # Глобальный минимум, в нём градиент вычислять не нужно будет
     if u_star_np is not None:
         u_star = torch.tensor(u_star_np, dtype=torch.float64)
@@ -31,12 +34,18 @@ def run_optimization(optimizer_class, u0_np, loss_fn, u_star_np=None,
     optimizer = optimizer_class([u], **opt_kwargs)
     hist = {'f': [], 'dist': [], 'grad_norm': [], 'time': 0.0, 'iters': 0,
             'f_evals': 0, 'grad_evals': 0}
+
     # этот таймер считает всё прошедшее время, а не только то, в которое процессор занимался этой программой
     # так как process_time суммировал бы время с каждого ядра, и perf_counter() является стандартом
     start_time = time.perf_counter()
 
     # каждая итерация - шаг оптимизации
     for i in range(num_iters):
+
+        # ограничение максимального времени оптимизации
+        if max_time is not None and time.perf_counter() - start_time >= max_time:
+            break
+
         #обнуление градиента, чтобы не было суммы предыдущих
         optimizer.zero_grad()
         loss = counted_loss_fn(u)
@@ -67,12 +76,13 @@ def run_optimization(optimizer_class, u0_np, loss_fn, u_star_np=None,
                 break
 
     hist['time'] = time.perf_counter() - start_time
-    hist['iters'] = i + 1
+    hist['iters'] = i + 1 if 'i' in locals() else 0
+
     # Счётчики runner'а + внутренние счётчики оптимизатора
     # getattr с 0 — чтобы работало и для Adam/Nesterov, у которых нет этих атрибутов
     hist['f_evals'] = f_evals + getattr(optimizer, 'f_evals', 0)
     hist['grad_evals'] = grad_evals + getattr(optimizer, 'grad_evals', 0)
-    return u.detach().numpy(), hist
-
     # .detach() отвязывает тензор, .numpy преобразует в numpy формат
     return u.detach().numpy(), hist
+
+
