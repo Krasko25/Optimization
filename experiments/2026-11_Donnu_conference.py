@@ -11,12 +11,12 @@ from optimization.runner import run_optimization
 from optimization.optimizers.collinear import CollinearGradients
 
 N_VALUES = [10, 50, 100, 200, 500, 1000, 2000, 3000, 4000, 5000]
-KAPPA_VALUES = [1, 2, 5, 10, 20, 50, 75, 100]
+KAPPA_VALUES = [10, 50, 100]
 
 NUM_ITERS = 3000
 TOL_DIST = 0.05
 
-LR = 1e-2
+LR = 1e-3
 BETAS_ADAM = (0.9, 0.999)
 MOMENTUM_NESTEROV = 0.9
 
@@ -39,8 +39,8 @@ OPTIMIZER_NAMES = [
 
 
 def seeds_for(n: int, kappa: int) -> tuple[int, int, int]:
-    base = 1000 * n + kappa
-    return base + 42, base + 1042, base + 2042
+    base = 1000 * n + kappa * 100
+    return base + 1, base + 2, base + 3
 
 
 def make_optimizers(loss_fn):
@@ -58,7 +58,6 @@ def make_optimizers(loss_fn):
             c1=1e-8,
             c2=4.0,
             delta0=1e-5,
-            delta_m_factor=1e-15,
             h0=1e-8,
         )),
     }
@@ -75,6 +74,7 @@ def run_experiment():
     """
     results = {name: {n: {} for n in N_VALUES} for name in OPTIMIZER_NAMES}
     total_times = {name: 0.0 for name in OPTIMIZER_NAMES}
+
 
     for n in N_VALUES:
         print(f"\n=== n = {n} ===")
