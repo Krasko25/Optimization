@@ -38,6 +38,11 @@ class CollinearGradients(Optimizer):
         self.c1 = c1
         self.c2 = c2
         self.delta0 = delta0
+        # Адаптивный радиус окрестности
+        self.delta_k = delta0
+        # Норма градиента в предыдущей внешней итерации
+        self.prev_grad_norm = None
+
         self.h0 = h0
         self.l_max_cap = l_max_cap
 
@@ -211,8 +216,9 @@ class CollinearGradients(Optimizer):
 
         grad_k = self._get_flat_grad()
         grad_k_norm = grad_k.norm()
+        grad_k_norm_val = grad_k_norm.item()
 
-        if grad_k_norm.item() < 1e-30:
+        if grad_k_norm_val < 1e-30:
             return
 
         # grad_k_unit — инвариант относительно точки u
@@ -224,11 +230,20 @@ class CollinearGradients(Optimizer):
         u_k = self._get_flat()
         n = u_k.numel()
 
-        # Первая точка подитераций (формула 10 из статьи)
+        eps = torch.finfo(u_k.dtype).eps
+        delta_m = 1e5 * eps * self.delta0
 
-        # отступаем от u^k на расстояние delta_k в направлении роста функции
-        # деление на sqrt(n) нужно, чтобы евклидова длина шага была ровно delta_k
-        delta_k = self.delta0
+        # Адаптация радиуса между внешними итерациями (формула 11)
+        if self.prev_grad_norm is not None:
+            ratio = grad_k_norm_val / self.prev_grad_norm
+
+            self.delta_k = max(
+                min(self.delta_k * ratio, self.delta0),
+                delta_m
+            )
+
+        delta_k = self.delta_k
+
         u_k_l = torch.sign(grad_k).mul_(delta_k / math.sqrt(n)).add_(u_k)
 
         # Начальная невязка
@@ -253,10 +268,6 @@ class CollinearGradients(Optimizer):
             max(2, round(self.c2 * math.log(max(n, 2))
                          * abs(math.log(max(self.c1, 1e-15))))),
         )
-
-        # если МКГ уйдет от u_k дальше этого радиуса, поиск коллинеарности теряет смысл
-        eps = torch.finfo(u_k.dtype).eps
-        delta_m = 1e5 * eps * self.delta0
 
         # порог остановки по точности коллинеарности — константа, не зависит от итерации,
         # поэтому вычисляем один раз до цикла
@@ -378,6 +389,17 @@ class CollinearGradients(Optimizer):
         lr = self.param_groups[0]['lr']
         step_vec = lr * b_k * d_k
 
+        debug_step = {
+            "grad_k_norm": grad_k.norm().item(),
+            "grad_k_star_norm": grad_k_star.norm().item(),
+            "d_k_norm": d_k.norm().item(),
+            "num": num,
+            "den": den,
+            "b_k": b_k,
+            "step_norm": step_vec.norm().item(),
+            "grad_step_dot": torch.dot(grad_k, step_vec).item(),
+        }
+
         # ПРОЦЕДУРА GETSTEP (принудительный спуск)
         # проверяем, что мы движемся в сторону УБЫВАНИЯ функции
         # скалярное произведение <-grad_k, step_vec> должно быть положительным (угол < 90 градусов)
@@ -394,9 +416,18 @@ class CollinearGradients(Optimizer):
             b_k = 1.0 / one_minus
             step_vec = lr * b_k * d_k
 
+        debug_step["final_step_norm"] = step_vec.norm().item()
+        debug_step["final_grad_step_dot"] = torch.dot(grad_k, step_vec).item()
+
+        self.debug_history[-1]["outer_step"] = debug_step
+
         # обновление параметров
         # u^{k+1} = u^k + b^k * d^k
         u_new = u_k + step_vec
 
         # раскладываем плоский вектор обратно по pytorch-тензорам
         self._set_flat(u_new)
+
+        # Сохраняем норму градиента текущей внешней точки
+        # для адаптации delta на следующей внешней итерации
+        self.prev_grad_norm = grad_k_norm_val
