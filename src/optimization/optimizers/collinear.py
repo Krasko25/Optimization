@@ -163,7 +163,7 @@ class CollinearGradients(Optimizer):
         # если градиенты коллинеарны (сонаправлены или противоположны), то r = 0
         # если они перпендикулярны, то ||r|| = sqrt(2)
         scalar = s / gn_val
-        r = grad_u.mul(scalar).sub_(grad_k_unit)
+        r = grad_u * scalar - grad_k_unit
 
         return grad_u, r
 
@@ -267,6 +267,7 @@ class CollinearGradients(Optimizer):
 
 
         # поиск коллинеарной точки
+        residual_history = []
 
         stop_reason = "Достигнут лимит подитераций l_max"
         inner_iterations = 0
@@ -332,6 +333,8 @@ class CollinearGradients(Optimizer):
             r_l = r_l_new  # обновляем невязку
             r_l_norm_sq = r_l_new_norm_sq
 
+            residual_history.append(r_l_norm_sq.sqrt().item())
+
             successful_iterations += 1
 
         # Сохраняем диагностику
@@ -344,6 +347,7 @@ class CollinearGradients(Optimizer):
             "residual": r_l_norm_sq.sqrt().item(),
             "stop_reason": stop_reason,
             "l_max": l_max,
+            "residual_history": residual_history,
         })
 
         # Направление и шаг
