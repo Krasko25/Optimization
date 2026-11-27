@@ -32,6 +32,8 @@ class CollinearGradients(Optimizer):
 
         # возвращает прокси на родительский класс, чтобы были param_groups, state, zero_grad
         super().__init__(params, defaults)
+
+        self.debug_history = []
         self.objective_fn = objective_fn
         self.c1 = c1
         self.c2 = c2
@@ -202,6 +204,11 @@ class CollinearGradients(Optimizer):
         1) Поиск точки u_k_star в окрестности u_k, где градиент коллинеарен исходному
         2) Вычисление направления d_k и шага b_k, ведущих к оптимуму, и обновление параметров
         """
+        debug_start_f = self.f_evals
+        debug_start_grad = self.grad_evals
+
+        outer_iteration = len(self.debug_history) + 1
+
         grad_k = self._get_flat_grad()
         grad_k_norm = grad_k.norm()
 
@@ -258,23 +265,33 @@ class CollinearGradients(Optimizer):
         u_k_star = u_k_l
         grad_k_star = grad_k_l
 
+
         # поиск коллинеарной точки
+
+        stop_reason = "Достигнут лимит подитераций l_max"
+        inner_iterations = 0
+        successful_iterations = 0
 
         # цикл метода сопряженных градиентов на невязке r(u)
         for l in range(1, l_max + 1):
 
+            inner_iterations = l
+
             # УСЛОВИЕ ОСТАНОВКИ 1: достигли нужной точности коллинеарности
             # ||r|| <= c1 * sqrt(2)
             if r_l_norm_sq.sqrt().item() <= c1_sqrt2:
+                stop_reason = "Достигнута точность коллинеарности"
                 break
 
             # УСЛОВИЕ ОСТАНОВКИ 2: вышли за минимальный радиус окрестности
             if (u_k_l - u_k).norm().item() < delta_m:
+                stop_reason = "Достигнут минимальный радиус"
                 break
 
             # УСЛОВИЕ ОСТАНОВКИ 3: направление МКГ выродилось (почти нулевое)
             p_norm_val = p_cg.norm().item()
             if p_norm_val < 1e-30:
+                stop_reason = "Выродилось направление МКГ"
                 break
 
             # формула 9
@@ -314,6 +331,20 @@ class CollinearGradients(Optimizer):
 
             r_l = r_l_new  # обновляем невязку
             r_l_norm_sq = r_l_new_norm_sq
+
+            successful_iterations += 1
+
+        # Сохраняем диагностику
+        self.debug_history.append({
+            "outer_iteration": outer_iteration,
+            "inner_iterations": inner_iterations,
+            "successful_iterations": successful_iterations,
+            "f_evals": self.f_evals - debug_start_f,
+            "grad_evals": self.grad_evals - debug_start_grad,
+            "residual": r_l_norm_sq.sqrt().item(),
+            "stop_reason": stop_reason,
+            "l_max": l_max,
+        })
 
         # Направление и шаг
 
